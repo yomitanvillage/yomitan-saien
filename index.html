@@ -144,13 +144,14 @@ const firebaseConfig = {
   th, td { text-align: center; padding: 10px 6px; border-bottom: 1px solid #eee; border-right: 1px solid #f0f0f0; font-size: 14px; }
   th:last-child, td:last-child { border-right: none; }
 
-  thead th { background: #f0f7f3; color: #1b4332; position: sticky; top: 0; }
+  thead th { background: #f0f7f3; color: #1b4332; position: sticky; top: 0; z-index: 2; }
   .th-date { font-size: 14px; font-weight: 700; }
   .th-dow { font-size: 11px; color: #888; }
   th.sat .th-dow, th.sat .th-date { color: #2b6cb0; }
   th.sun .th-dow, th.sun .th-date { color: #c0392b; }
 
-  .time-col { text-align: left; white-space: nowrap; font-weight: 700; color: #1b4332; background: #fafcfa; font-size: 13px; padding-left: 12px; }
+  .time-col { text-align: left; white-space: nowrap; font-weight: 700; color: #1b4332; background: #fafcfa; font-size: 13px; padding-left: 12px; position: sticky; left: 0; z-index: 1; box-shadow: 2px 0 4px rgba(0,0,0,0.06); }
+  thead th.time-col { z-index: 3; }
 
   .today-col { background: #fdf9ec; }
   thead th.today-col { background: #fef3cf; }
@@ -167,19 +168,22 @@ const firebaseConfig = {
   .notice-list li { font-size: 13px; color: #5c4400; line-height: 1.6; padding-left: 1.3em; position: relative; margin-bottom: 6px; }
   .notice-list li:last-child { margin-bottom: 0; }
   .notice-list li::before { content: "・"; position: absolute; left: 0; }
+
+  .tel-link { color: inherit; font-weight: 700; text-decoration: underline; }
+  header .tel-link { color: #fff; }
 </style>
 </head>
 <body>
 <header>
   <h1>読谷村火葬場　よみたん斎苑　予約状況</h1>
-  <div class="sub">ご利用希望の際は事務局までお電話にてお問い合わせください</div>
+  <div class="sub">ご利用の場合は、読谷村役場生活環境課（電話番号：<a href="tel:0989829214" class="tel-link">098-982-9214</a>）までお問い合わせください。</div>
 </header>
 <div class="app">
 
   <div class="notice-box">
     <div class="notice-title">⚠️ ご利用にあたっての注意事項</div>
     <ul class="notice-list">
-      <li>このページは予約の空き状況を確認するための画面です。WEB上での火葬場の予約はできません。ご予約は事務局までお電話ください。</li>
+      <li>このページは予約の空き状況を確認するための画面です。WEB上での火葬場の予約はできません。ご予約・お問い合わせは読谷村役場生活環境課（電話番号：<a href="tel:0989829214" class="tel-link">098-982-9214</a>）までご連絡ください。</li>
       <li>土日にご予約いただいた分は、反映までにお時間がかかる場合があります。</li>
       <li>各予約枠の終了時間は目安です。ご遺体の状況により、時間が前後する場合があります。</li>
     </ul>
