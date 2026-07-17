@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>よみたん斎苑　予約管理</title>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getDatabase, ref, set, remove, onValue } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+  // ⚠️ ここを新しく作成したFirebaseプロジェクトの設定値に書き換えてください。
+  // Firebaseコンソール → プロジェクトの設定 → マイアプリ（ウェブアプリ）→ SDK の設定と構成 で確認できます。
+  // Realtime Database も作成し、下記 databaseURL を反映してください。
+const firebaseConfig = {
+  apiKey: "AIzaSyB6_fxjvnvT0rHyh5omayFudu2OYhQOm50",
+  authDomain: "yomitan-saien.firebaseapp.com",
+  databaseURL: "https://yomitan-saien-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "yomitan-saien",
+  storageBucket: "yomitan-saien.firebasestorage.app",
+  messagingSenderId: "28144249290",
+  appId: "1:28144249290:web:1c1defb4b2e51b313f8733",
+  measurementId: "G-LLF5WT0MDF"
+};
+
+  const PASSWORD = "9214";
+  const db = getDatabase(initializeApp(firebaseConfig));
+
+  const SLOTS = [
+    { id: "slot1", time: "9:00〜11:00" },
+    { id: "slot2", time: "9:40〜11:40" },
+    { id: "slot3", time: "11:30〜13:30" },
+    { id: "slot4", time: "12:40〜14:40" },
+    { id: "slot5", time: "14:30〜16:30" }
+  ];
+
+  let loggedIn = false;
+  let currentDate = todayStr();
+  let unsubscribe = null;
+  let currentData = {};
+
+  function todayStr() {
+    const d = new Date(), pad = n => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  }
+
+  function fmtDateLabel(dateStr) {
+    const d = new Date(dateStr + "T00:00:00");
+    const w = ["日", "月", "火", "水", "木", "金", "土"][d.getDay()];
+    return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日（${w}）`;
+  }
+
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+
+  // ──── ログイン ────
+  window.doLogin = () => {
+    if (document.getElementById("pw-input").value === PASSWORD) {
+      loggedIn = true;
+      document.getElementById("login-section").style.display = "none";
+      document.getElementById("panel-section").style.display = "block";
+      document.getElementById("date-input").value = currentDate;
+      document.getElementById("date-label").textContent = fmtDateLabel(currentDate);
+      watchDate(currentDate);
+    } else {
+      document.getElementById("login-error").style.display = "block";
+      document.getElementById("pw-input").value = "";
+    }
+  };
+
+  // ──── 日付操作 ────
+  window.onDateChange = () => {
+    const v = document.getElementById("date-input").value;
+    if (!v) return;
+    currentDate = v;
+    document.getElementById("date-label").textContent = fmtDateLabel(currentDate);
+    watchDate(currentDate);
+  };
+
+  window.shiftDate = (days) => {
+    const d = new Date(currentDate + "T00:00:00");
+    d.setDate(d.getDate() + days);
+    const pad = n => String(n).padStart(2, "0");
+    currentDate = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    document.getElementById("date-input").value = currentDate;
+    document.getElementById("date-label").textContent = fmtDateLabel(currentDate);
+    watchDate(currentDate);
+  };
+
+  function watchDate(dateStr) {
+    if (unsubscribe) unsubscribe();
+    const dRef = ref(db, "reservations/" + dateStr);
+    unsubscribe = onValue(dRef, (snap) => {
+      currentData = snap.val() || {};
+      renderSlots();
+    });
+  }
+
+  // ──── 描画 ────
+  function renderSlots() {
+    const box = document.getElementById("slot-list");
+    box.innerHTML = SLOTS.map(s => {
+      const r = currentData[s.id];
+      const filled = !!(r && r.name);
+      const badge = filled
+        ? `<span class="cur-badge badge-closed">予約あり</span>`
+        : `<span class="cur-badge badge-open">空き</span>`;
+      return `
+        <div class="slot-card">
+          <div class="slot-header">
+            <span class="slot-time">${s.time}</span>
+            ${badge}
+          </div>
+          <input type="text" id="name-${s.id}" placeholder="予約者名を入力" value="${filled ? esc(r.name) : ""}" />
+          <div class="slot-actions">
+            <button class="primary-btn" onclick="saveSlot('${s.id}')">保存する</button>
+            <button class="cancel-btn" onclick="cancelSlot('${s.id}')" ${filled ? "" : "disabled"}>予約を取り消す</button>
+          </div>
+        </div>`;
+    }).join("");
+  }
+
+  // ──── 保存・取消 ────
+  window.saveSlot = async (slotId) => {
+    const input = document.getElementById("name-" + slotId);
+    const name = input.value.trim();
+    if (!name) { showToast("予約者名を入力してください"); return; }
+    try {
+      await set(ref(db, `reservations/${currentDate}/${slotId}`), {
+        name,
+        updatedAt: new Date().toISOString()
+      });
+      showToast("予約を保存しました ✓");
+    } catch (e) { showToast("保存に失敗しました"); }
+  };
+
+  window.cancelSlot = async (slotId) => {
+    if (!confirm("この予約枠を空きに戻しますか？")) return;
+    try {
+      await remove(ref(db, `reservations/${currentDate}/${slotId}`));
+      showToast("予約を取り消しました");
+    } catch (e) { showToast("取消に失敗しました"); }
+  };
+
+  function showToast(msg) {
+    const t = document.getElementById("toast");
+    t.textContent = msg;
+    t.classList.add("show");
+    setTimeout(() => t.classList.remove("show"), 2500);
+  }
+
+  document.addEventListener("keydown", e => { if (e.key === "Enter" && !loggedIn) window.doLogin(); });
+</script>
+
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "Hiragino Sans", "Meiryo", sans-serif; background: #f0f4f0; color: #1a1a1a; min-height: 100vh; }
+  header { background: #1b4332; color: #fff; padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; }
+  header h1 { font-size: 17px; font-weight: 700; }
+  .header-tag { font-size: 13px; background: rgba(255,255,255,0.2); padding: 3px 10px; border-radius: 20px; flex-shrink: 0; }
+  .app { max-width: 480px; margin: 0 auto; padding: 16px; }
+
+  /* ログイン */
+  .login-box { background: #fff; border: 1px solid #d0e0d5; border-radius: 14px; padding: 28px 24px; margin-top: 8px; }
+  .login-title { font-size: 18px; font-weight: 700; color: #1b4332; text-align: center; margin-bottom: 4px; }
+  .login-sub { font-size: 15px; color: #888; text-align: center; margin-bottom: 20px; }
+  .form-label { font-size: 14px; color: #666; margin-bottom: 6px; display: block; }
+  input[type="password"] { width: 100%; padding: 12px 14px; font-size: 24px; letter-spacing: 8px; border: 1px solid #ccc; border-radius: 8px; font-family: inherit; margin-bottom: 12px; background: #fafafa; text-align: center; }
+  input[type="password"]:focus { outline: none; border-color: #2d6a4f; }
+  .login-error { font-size: 15px; color: #c0392b; background: #fff0f0; border: 1px solid #f4a0a0; border-radius: 6px; padding: 8px 12px; margin-bottom: 12px; }
+
+  /* 日付ナビ */
+  .date-nav { background: #fff; border: 1px solid #d0e0d5; border-radius: 14px; padding: 14px 16px; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+  .date-nav-btn { flex-shrink: 0; padding: 10px 12px; border: 1px solid #ccc; border-radius: 8px; background: #fff; font-size: 15px; cursor: pointer; font-family: inherit; }
+  .date-nav-btn:hover { background: #f5f5f5; }
+  .date-nav-mid { flex: 1; text-align: center; }
+  .date-label { font-size: 14px; font-weight: 700; color: #1b4332; margin-bottom: 4px; }
+  input[type="date"] { width: 100%; padding: 8px 10px; font-size: 15px; border: 1px solid #ccc; border-radius: 8px; background: #fafafa; font-family: inherit; }
+
+  /* 予約枠カード */
+  .slot-card { background: #fff; border: 1px solid #d0e0d5; border-radius: 14px; padding: 16px; margin-bottom: 12px; }
+  .slot-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .slot-time { font-size: 16px; font-weight: 700; color: #1b4332; }
+  .cur-badge { font-size: 13px; font-weight: 700; padding: 4px 12px; border-radius: 20px; flex-shrink: 0; }
+  .badge-open { background: #d8f3dc; color: #1b4332; }
+  .badge-closed { background: #ffe0e0; color: #7f1d1d; }
+
+  input[type="text"] { width: 100%; padding: 10px 12px; font-size: 16px; border: 1px solid #ccc; border-radius: 8px; background: #fafafa; font-family: inherit; margin-bottom: 10px; color: #1a1a1a; }
+  input[type="text"]:focus { outline: none; border-color: #2d6a4f; }
+
+  .slot-actions { display: flex; gap: 8px; }
+  .primary-btn { flex: 1; padding: 11px; border: none; border-radius: 8px; background: #2d6a4f; color: #fff; font-size: 15px; font-weight: 700; cursor: pointer; font-family: inherit; transition: background 0.15s; }
+  .primary-btn:hover { background: #1b4332; }
+  .cancel-btn { flex: 1; padding: 11px; background: #fff; border: 1px solid #f4a0a0; border-radius: 8px; color: #c0392b; font-size: 15px; cursor: pointer; font-family: inherit; }
+  .cancel-btn:hover:not(:disabled) { background: #fff0f0; }
+  .cancel-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .toast { position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%); background: #1b4332; color: #fff; font-size: 15px; padding: 12px 24px; border-radius: 24px; opacity: 0; pointer-events: none; transition: opacity 0.3s; white-space: nowrap; z-index: 9999; }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<header>
+  <h1>よみたん斎苑　予約管理</h1>
+  <span class="header-tag">管理者専用</span>
+</header>
+<div class="app">
+
+  <!-- ログイン -->
+  <div id="login-section">
+    <div class="login-box">
+      <div class="login-title">管理者ログイン</div>
+      <div class="login-sub">読谷村火葬場 よみたん斎苑 担当者専用</div>
+      <label class="form-label">パスワード</label>
+      <input type="password" id="pw-input" placeholder="・・・・" maxlength="10" />
+      <div class="login-error" id="login-error" style="display:none;">パスワードが違います</div>
+      <button class="primary-btn" onclick="doLogin()">ログイン</button>
+    </div>
+  </div>
+
+  <div id="panel-section" style="display:none;">
+
+    <div class="date-nav">
+      <button class="date-nav-btn" onclick="shiftDate(-1)">◀ 前日</button>
+      <div class="date-nav-mid">
+        <div class="date-label" id="date-label"></div>
+        <input type="date" id="date-input" onchange="onDateChange()" />
+      </div>
+      <button class="date-nav-btn" onclick="shiftDate(1)">翌日 ▶</button>
+    </div>
+
+    <div id="slot-list"></div>
+
+  </div><!-- /panel-section -->
+</div>
+<div class="toast" id="toast"></div>
+</body>
+</html>

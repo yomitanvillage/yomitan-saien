@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>よみたん斎苑　予約状況</title>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+  // ⚠️ admin.html と同じFirebaseプロジェクトの設定値に書き換えてください。
+const firebaseConfig = {
+  apiKey: "AIzaSyB6_fxjvnvT0rHyh5omayFudu2OYhQOm50",
+  authDomain: "yomitan-saien.firebaseapp.com",
+  databaseURL: "https://yomitan-saien-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "yomitan-saien",
+  storageBucket: "yomitan-saien.firebasestorage.app",
+  messagingSenderId: "28144249290",
+  appId: "1:28144249290:web:1c1defb4b2e51b313f8733",
+  measurementId: "G-LLF5WT0MDF"
+};
+
+  const db = getDatabase(initializeApp(firebaseConfig));
+  const allRef = ref(db, "reservations");
+
+  const SLOTS = [
+    { id: "slot1", time: "9:00〜11:00" },
+    { id: "slot2", time: "9:40〜11:40" },
+    { id: "slot3", time: "11:30〜13:30" },
+    { id: "slot4", time: "12:40〜14:40" },
+    { id: "slot5", time: "14:30〜16:30" }
+  ];
+
+  const DAYS_SHOWN = 7;
+  let weekStart = startOfToday();
+  let allData = {};
+
+  function startOfToday() {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }
+
+  function toDateStr(d) {
+    const pad = n => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  }
+
+  function addDays(d, n) {
+    const r = new Date(d);
+    r.setDate(r.getDate() + n);
+    return r;
+  }
+
+  function isSameDay(a, b) {
+    return toDateStr(a) === toDateStr(b);
+  }
+
+  window.shiftWeek = (n) => {
+    const next = addDays(weekStart, n * DAYS_SHOWN);
+    if (next < startOfToday()) return; // 過去週へは戻れない
+    weekStart = next;
+    render();
+  };
+
+  window.goToday = () => {
+    weekStart = startOfToday();
+    render();
+  };
+
+  function render() {
+    const today = startOfToday();
+    const days = Array.from({ length: DAYS_SHOWN }, (_, i) => addDays(weekStart, i));
+
+    document.getElementById("range-label").textContent =
+      `${fmtShort(days[0])} 〜 ${fmtShort(days[days.length - 1])}`;
+
+    document.getElementById("prev-btn").disabled = weekStart <= today;
+
+    let thead = `<tr><th class="time-col">時間帯</th>`;
+    days.forEach(d => {
+      const dow = d.getDay();
+      const dowClass = dow === 0 ? "sun" : dow === 6 ? "sat" : "";
+      const isToday = isSameDay(d, today);
+      thead += `<th class="${dowClass} ${isToday ? "today-col" : ""}">
+          <div class="th-date">${d.getMonth() + 1}/${d.getDate()}</div>
+          <div class="th-dow">${["日","月","火","水","木","金","土"][dow]}</div>
+        </th>`;
+    });
+    thead += `</tr>`;
+
+    let tbody = "";
+    SLOTS.forEach(slot => {
+      tbody += `<tr><td class="time-col">${slot.time}</td>`;
+      days.forEach(d => {
+        const dateStr = toDateStr(d);
+        const isToday = isSameDay(d, today);
+        const rec = allData[dateStr] && allData[dateStr][slot.id];
+        const booked = !!(rec && rec.name);
+        tbody += `<td class="${isToday ? "today-col" : ""}">
+            <span class="mark ${booked ? "mark-x" : "mark-o"}">${booked ? "×" : "○"}</span>
+          </td>`;
+      });
+      tbody += `</tr>`;
+    });
+
+    document.getElementById("thead").innerHTML = thead;
+    document.getElementById("tbody").innerHTML = tbody;
+  }
+
+  function fmtShort(d) {
+    return `${d.getMonth() + 1}月${d.getDate()}日`;
+  }
+
+  onValue(allRef, (snap) => {
+    allData = snap.val() || {};
+    render();
+  });
+</script>
+
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "Hiragino Sans", "Meiryo", sans-serif; background: #f0f4f0; color: #1a1a1a; min-height: 100vh; }
+  header { background: #1b4332; color: #fff; padding: 16px 20px; text-align: center; }
+  header h1 { font-size: 18px; font-weight: 700; margin-bottom: 2px; }
+  header .sub { font-size: 12px; opacity: 0.85; }
+
+  .app { max-width: 720px; margin: 0 auto; padding: 16px; }
+
+  .legend { display: flex; gap: 16px; justify-content: center; margin-bottom: 14px; font-size: 14px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend .mark { display: inline-flex; }
+
+  .week-nav { display: flex; align-items: center; justify-content: space-between; background: #fff; border: 1px solid #d0e0d5; border-radius: 12px; padding: 10px 14px; margin-bottom: 14px; }
+  .week-nav button { padding: 9px 14px; border: 1px solid #ccc; border-radius: 8px; background: #fff; font-size: 14px; cursor: pointer; font-family: inherit; }
+  .week-nav button:hover:not(:disabled) { background: #f5f5f5; }
+  .week-nav button:disabled { opacity: 0.35; cursor: not-allowed; }
+  .week-nav .range-label { font-size: 15px; font-weight: 700; color: #1b4332; }
+  .today-btn { background: #e8f4ed !important; border-color: #52b788 !important; color: #1b4332; font-weight: 700; }
+
+  .table-wrap { background: #fff; border: 1px solid #d0e0d5; border-radius: 14px; overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; min-width: 620px; }
+  th, td { text-align: center; padding: 10px 6px; border-bottom: 1px solid #eee; border-right: 1px solid #f0f0f0; font-size: 14px; }
+  th:last-child, td:last-child { border-right: none; }
+
+  thead th { background: #f0f7f3; color: #1b4332; position: sticky; top: 0; }
+  .th-date { font-size: 14px; font-weight: 700; }
+  .th-dow { font-size: 11px; color: #888; }
+  th.sat .th-dow, th.sat .th-date { color: #2b6cb0; }
+  th.sun .th-dow, th.sun .th-date { color: #c0392b; }
+
+  .time-col { text-align: left; white-space: nowrap; font-weight: 700; color: #1b4332; background: #fafcfa; font-size: 13px; padding-left: 12px; }
+
+  .today-col { background: #fdf9ec; }
+  thead th.today-col { background: #fef3cf; }
+
+  .mark { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 50%; font-weight: 700; font-size: 15px; }
+  .mark-o { color: #1b4332; border: 2px solid #52b788; }
+  .mark-x { color: #c0392b; border: 2px solid #f4a0a0; }
+
+  .note { font-size: 12px; color: #888; text-align: center; margin-top: 14px; line-height: 1.7; }
+</style>
+</head>
+<body>
+<header>
+  <h1>読谷村火葬場　よみたん斎苑　予約状況</h1>
+  <div class="sub">ご利用希望の際は事務局までお電話にてお問い合わせください</div>
+</header>
+<div class="app">
+
+  <div class="legend">
+    <span><span class="mark mark-o">○</span> 空きあり</span>
+    <span><span class="mark mark-x">×</span> 予約済み</span>
+  </div>
+
+  <div class="week-nav">
+    <button id="prev-btn" onclick="shiftWeek(-1)">◀ 前の週</button>
+    <div>
+      <div class="range-label" id="range-label"></div>
+      <div style="text-align:center;"><button class="today-btn" onclick="goToday()" style="margin-top:4px;">今日</button></div>
+    </div>
+    <button onclick="shiftWeek(1)">次の週 ▶</button>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead id="thead"></thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+
+  <div class="note">※ 表示は自動的に更新されます。予約状況は随時変わる場合がありますので、あらかじめご了承ください。</div>
+
+</div>
+</body>
+</html>
